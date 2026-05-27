@@ -49,6 +49,8 @@ class toolbox {
     /** @var array $imagecontainerratios Ratio constants - 3-2, 3-1, 3-3, 2-3, 1-3, 4-3 and 3-4:... */
     private static $imagecontainerratios = [
         1 => '3-2', 2 => '3-1', 3 => '3-3', 4 => '2-3', 5 => '1-3', 6 => '4-3', 7 => '3-4', ];
+    /** @var array $dpimultipliers DPI multiplier choices keyed by the float multiplier value as a string. */
+    private static $dpimultipliers = ['1' => '1×', '1.5' => '1.5×', '2' => '2×', '3' => '3×'];
 
     /**
      * This is a lonely object.
@@ -98,6 +100,14 @@ class toolbox {
      */
     public static function get_default_image_container_ratio() {
         return 1; // Ratio of '3-2'.
+    }
+
+    /**
+     * Prevents ability to change a static variable outside of the class.
+     * @return array Array of DPI multiplier choices, keyed by multiplier value string.
+     */
+    public static function get_dpi_multipliers() {
+        return self::$dpimultipliers;
     }
 
     /**
@@ -182,6 +192,52 @@ class toolbox {
     }
 
     /**
+     * Store the original uploaded file directly as the displayed image, bypassing GD processing.
+     * Used for SVG files (which GD cannot process) and images under the file size threshold.
+     *
+     * @param stdClass $sectionimage Section image record.
+     * @param stored_file $sectionfile The uploaded file.
+     * @param int $courseid Course id.
+     * @param int $sectionid Section id.
+     * @param string $mime MIME type.
+     * @return stdClass Updated section image record.
+     */
+    private function store_original_as_displayed_image($sectionimage, $sectionfile, $courseid, $sectionid, $mime) {
+        global $DB;
+        $fs = get_file_storage();
+        $filename = $sectionfile->get_filename();
+        $coursecontext = context_course::instance($courseid);
+
+        $existingfiles = $fs->get_area_files($coursecontext->id, 'format_grid', 'displayedsectionimage', $sectionid);
+        foreach ($existingfiles as $existingfile) {
+            if (!$existingfile->is_directory()) {
+                $existingfile->delete();
+            }
+        }
+
+        $created = time();
+        $displayedimagefilerecord = [
+            'contextid' => $coursecontext->id,
+            'component' => 'format_grid',
+            'filearea' => 'displayedsectionimage',
+            'itemid' => $sectionid,
+            'filepath' => '/',
+            'filename' => $filename,
+            'userid' => $sectionfile->get_userid(),
+            'author' => $sectionfile->get_author(),
+            'license' => $sectionfile->get_license(),
+            'timecreated' => $created,
+            'timemodified' => $created,
+            'mimetype' => $mime,
+        ];
+        $fs->create_file_from_storedfile($displayedimagefilerecord, $sectionfile);
+        $sectionimage->displayedimagestate++;
+        $DB->set_field('format_grid_image', 'displayedimagestate', $sectionimage->displayedimagestate,
+            ['sectionid' => $sectionid]);
+        return $sectionimage;
+    }
+
+    /**
      * Set up the displayed image.
      * @param array $sectionimage Section information from its row in the 'format_grid_image' table.
      * @param stored_file $sectionfile Section file.
@@ -217,38 +273,27 @@ class toolbox {
                 }
             }
 
-            // SVG is a vector format; GD cannot process it, so store it directly as the displayed image.
+            // SVG is a vector format; GD cannot process it, so store it directly.
             if ($mime == 'image/svg+xml') {
-                $coursecontext = context_course::instance($courseid);
-                $existingfiles = $fs->get_area_files($coursecontext->id, 'format_grid', 'displayedsectionimage', $sectionid);
-                foreach ($existingfiles as $existingfile) {
-                    if (!$existingfile->is_directory()) {
-                        $existingfile->delete();
-                    }
-                }
-                $created = time();
-                $displayedimagefilerecord = [
-                    'contextid' => $coursecontext->id,
-                    'component' => 'format_grid',
-                    'filearea' => 'displayedsectionimage',
-                    'itemid' => $sectionid,
-                    'filepath' => '/',
-                    'filename' => $filename,
-                    'userid' => $sectionfile->get_userid(),
-                    'author' => $sectionfile->get_author(),
-                    'license' => $sectionfile->get_license(),
-                    'timecreated' => $created,
-                    'timemodified' => $created,
-                    'mimetype' => $mime,
-                ];
-                $fs->create_file_from_storedfile($displayedimagefilerecord, $sectionfile);
-                $sectionimage->displayedimagestate++;
-                $DB->set_field('format_grid_image', 'displayedimagestate', $sectionimage->displayedimagestate,
-                    ['sectionid' => $sectionid]);
-                return $sectionimage;
+                return $this->store_original_as_displayed_image($sectionimage, $sectionfile, $courseid, $sectionid, $mime);
+            }
+
+            // If the file is at or below the size threshold, serve the original directly.
+            // Disabled when converting to WebP, since that requires GD regardless.
+            $thresholdkb = (int) get_config('format_grid', 'defaultimagesizethreshold');
+            $converttowebp = (get_config('format_grid', 'defaultdisplayedimagefiletype') == 2);
+            if ($thresholdkb > 0 && !$converttowebp && $sectionfile->get_filesize() <= ($thresholdkb * 1024)) {
+                return $this->store_original_as_displayed_image($sectionimage, $sectionfile, $courseid, $sectionid, $mime);
             }
 
             $displayedimageinfo = $this->get_displayed_image_container_properties($settings);
+
+            // Apply DPI multiplier so GD generates a larger image for sharper rendering on high-DPI screens.
+            $multiplier = (float) get_config('format_grid', 'defaultdpimultiplier');
+            if ($multiplier > 1.0) {
+                $displayedimageinfo['width'] = (int) round($displayedimageinfo['width'] * $multiplier);
+                $displayedimageinfo['height'] = (int) round($displayedimageinfo['height'] * $multiplier);
+            }
             $tmproot = make_temp_directory('gridformatdisplayedimagecontainer');
             $tmpfilepath = $tmproot . '/' . $sectionfile->get_contenthash();
             $sectionfile->copy_content_to($tmpfilepath);

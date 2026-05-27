@@ -148,6 +148,27 @@ if ($ADMIN->fulltree) {
     $setting->set_updatedcallback('format_grid::update_displayed_images_callback');
     $page->add($setting);
 
+    // Image file size threshold - 0 = disabled, otherwise serve original if file is at or below this many KB.
+    $name = 'format_grid/defaultimagesizethreshold';
+    $title = get_string('defaultimagesizethreshold', 'format_grid');
+    $description = get_string('defaultimagesizethreshold_desc', 'format_grid');
+    $default = 0;
+    $lower = 0;
+    $upper = 10240; // 10 MB.
+    $setting = new admin_setting_configinteger($name, $title, $description, $default, $lower, $upper);
+    $setting->set_updatedcallback('format_grid::update_displayed_images_callback');
+    $page->add($setting);
+
+    // DPI multiplier - multiply tile dimensions when GD generates the displayed image.
+    $name = 'format_grid/defaultdpimultiplier';
+    $title = get_string('defaultdpimultiplier', 'format_grid');
+    $description = get_string('defaultdpimultiplier_desc', 'format_grid');
+    $default = '1';
+    $choices = \format_grid\toolbox::get_dpi_multipliers();
+    $setting = new admin_setting_configselect($name, $title, $description, $default, $choices);
+    $setting->set_updatedcallback('format_grid::update_displayed_images_callback');
+    $page->add($setting);
+
     // Section zero in grid.
     $name = 'format_grid/defaultsectionzeroingrid';
     $title = get_string('defaultsectionzeroingrid', 'format_grid');
