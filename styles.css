@@ -78,7 +78,7 @@
 }
 
 .format-grid .thegrid .grid-image-container {
-    border-radius: inherit;
+    border-radius: var(--bs-card-border-radius);
     height: 140px;
     overflow: hidden;
 }
