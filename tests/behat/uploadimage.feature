@@ -25,3 +25,15 @@ Feature: Image upload
     And I turn editing mode off
     Then "//img[contains(@src, 'Duckling.jpg')]" "xpath_element" should exist in the "#section-2 .grid-image" "css_element"
     And "//img[contains(@alt, 'Duckling')]" "xpath_element" should exist in the "#section-2 .grid-image" "css_element"
+
+  @_file_upload @javascript
+  Scenario: Upload an SVG image to section 3 - SVG files are served directly without GD processing.
+    When I turn editing mode on
+    And I open section "3" edit menu
+    And I click on "Edit settings" "link" in the "Section 3" "section"
+    And I upload "course/format/grid/tests/fixtures/test.svg" file to "Section image" filemanager
+    And I set the field "Image alt text" to "Test SVG"
+    And I press "Save changes"
+    And I turn editing mode off
+    Then "//img[contains(@src, 'test.svg')]" "xpath_element" should exist in the "#section-3 .grid-image" "css_element"
+    And "//img[contains(@alt, 'Test SVG')]" "xpath_element" should exist in the "#section-3 .grid-image" "css_element"

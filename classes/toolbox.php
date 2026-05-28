@@ -115,7 +115,7 @@ class toolbox {
         if ($displayediswebp) {
             $filetype = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
             if (!empty($filetype)) {
-                if ($filetype != 'webp') {
+                if ($filetype != 'webp' && $filetype != 'svg') {
                     $filename .= '.webp';
                 }
             } else {
@@ -181,6 +181,64 @@ class toolbox {
     }
 
     /**
+     * Deletes all non-directory files in the displayedsectionimage file area for a section.
+     *
+     * @param int $coursecontextid Course context id.
+     * @param int $sectionid Section id.
+     * @param file_storage $fs File storage instance.
+     */
+    private function delete_existing_displayed_image($coursecontextid, $sectionid, $fs) {
+        $existingfiles = $fs->get_area_files($coursecontextid, 'format_grid', 'displayedsectionimage', $sectionid);
+        foreach ($existingfiles as $existingfile) {
+            if (!$existingfile->is_directory()) {
+                $existingfile->delete();
+            }
+        }
+    }
+
+    /**
+     * Store the original uploaded file directly as the displayed image, bypassing GD processing.
+     * Used for SVG files (which GD cannot process) and images under the file size threshold.
+     *
+     * @param stdClass $sectionimage Section image record.
+     * @param stored_file $sectionfile The uploaded file.
+     * @param int $courseid Course id.
+     * @param int $sectionid Section id.
+     * @param string $mime MIME type.
+     * @return stdClass Updated section image record.
+     */
+    private function store_original_as_displayed_image($sectionimage, $sectionfile, $courseid, $sectionid, $mime) {
+        global $DB;
+
+        $fs = get_file_storage();
+        $filename = $sectionfile->get_filename();
+        $coursecontext = context_course::instance($courseid);
+
+        $this->delete_existing_displayed_image($coursecontext->id, $sectionid, $fs);
+
+        $created = time();
+        $displayedimagefilerecord = [
+            'contextid' => $coursecontext->id,
+            'component' => 'format_grid',
+            'filearea' => 'displayedsectionimage',
+            'itemid' => $sectionid,
+            'filepath' => '/',
+            'filename' => $filename,
+            'userid' => $sectionfile->get_userid(),
+            'author' => $sectionfile->get_author(),
+            'license' => $sectionfile->get_license(),
+            'timecreated' => $created,
+            'timemodified' => $created,
+            'mimetype' => $mime,
+        ];
+        $fs->create_file_from_storedfile($displayedimagefilerecord, $sectionfile);
+        $sectionimage->displayedimagestate++;
+        $DB->set_field('format_grid_image', 'displayedimagestate', $sectionimage->displayedimagestate,
+            ['sectionid' => $sectionid]);
+        return $sectionimage;
+    }
+
+    /**
      * Set up the displayed image.
      * @param array $sectionimage Section information from its row in the 'format_grid_image' table.
      * @param stored_file $sectionfile Section file.
@@ -200,16 +258,25 @@ class toolbox {
             $mime = $sectionfile->get_mimetype();
             $filename = $sectionfile->get_filename();
 
-            // Core does not natively support webp.
+            // Core does not natively support webp or svg+xml.
             if ($mime == 'document/unknown') {
                 $filetype = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
-                if ((!empty($filetype)) && ($filetype == 'webp')) {
-                    $mime = 'image/webp';
-                    $updatedrecord = new \stdClass();
-                    $updatedrecord->id = $sectionfile->get_id();
-                    $updatedrecord->mimetype = $mime;
-                    $DB->update_record('files', $updatedrecord);
+                if (!empty($filetype)) {
+                    if ($filetype == 'webp') {
+                        $mime = 'image/webp';
+                        $updatedrecord = new \stdClass();
+                        $updatedrecord->id = $sectionfile->get_id();
+                        $updatedrecord->mimetype = $mime;
+                        $DB->update_record('files', $updatedrecord);
+                    } else if ($filetype == 'svg') {
+                        $mime = 'image/svg+xml';
+                    }
                 }
+            }
+
+            // SVG is a vector format; GD cannot process it, so store it directly.
+            if ($mime == 'image/svg+xml') {
+                return $this->store_original_as_displayed_image($sectionimage, $sectionfile, $courseid, $sectionid, $mime);
             }
 
             $displayedimageinfo = $this->get_displayed_image_container_properties($settings);
@@ -249,12 +316,7 @@ class toolbox {
                 $coursecontext = context_course::instance($courseid);
 
                 // Remove existing displayed image.
-                $existingfiles = $fs->get_area_files($coursecontext->id, 'format_grid', 'displayedsectionimage', $sectionid);
-                foreach ($existingfiles as $existingfile) {
-                    if (!$existingfile->is_directory()) {
-                        $existingfile->delete();
-                    }
-                }
+                $this->delete_existing_displayed_image($coursecontext->id, $sectionid, $fs);
 
                 $created = time();
                 $displayedimagefilerecord = [
