@@ -49,6 +49,8 @@ class toolbox {
     /** @var array $imagecontainerratios Ratio constants - 3-2, 3-1, 3-3, 2-3, 1-3, 4-3 and 3-4:... */
     private static $imagecontainerratios = [
         1 => '3-2', 2 => '3-1', 3 => '3-3', 4 => '2-3', 5 => '1-3', 6 => '4-3', 7 => '3-4', ];
+    /** @var array $dpimultipliers DPI multiplier choices keyed by the float multiplier value as a string. */
+    private static $dpimultipliers = ['1' => '1×', '1.5' => '1.5×', '2' => '2×', '3' => '3×'];
 
     /**
      * This is a lonely object.
@@ -98,6 +100,14 @@ class toolbox {
      */
     public static function get_default_image_container_ratio() {
         return 1; // Ratio of '3-2'.
+    }
+
+    /**
+     * Prevents ability to change a static variable outside of the class.
+     * @return array Array of DPI multiplier choices, keyed by multiplier value string.
+     */
+    public static function get_dpi_multipliers() {
+        return self::$dpimultipliers;
     }
 
     /**
@@ -279,7 +289,23 @@ class toolbox {
                 return $this->store_original_as_displayed_image($sectionimage, $sectionfile, $courseid, $sectionid, $mime);
             }
 
+            // If the file is at or below the size threshold, serve the original directly.
+            // Disabled when converting to WebP, since that requires GD regardless.
+            $thresholdkb = (int) get_config('format_grid', 'defaultimagesizethreshold');
+            $converttowebp = (get_config('format_grid', 'defaultdisplayedimagefiletype') == 2);
+            if ($thresholdkb > 0 && !$converttowebp && $sectionfile->get_filesize() <= ($thresholdkb * 1024)) {
+                return $this->store_original_as_displayed_image($sectionimage, $sectionfile, $courseid, $sectionid, $mime);
+            }
+
             $displayedimageinfo = $this->get_displayed_image_container_properties($settings);
+
+            // Apply DPI multiplier so GD generates a larger image for sharper rendering on high-DPI screens.
+            $multiplier = (float) get_config('format_grid', 'defaultdpimultiplier');
+            if ($multiplier > 1.0) {
+                $displayedimageinfo['width'] = (int) round($displayedimageinfo['width'] * $multiplier);
+                $displayedimageinfo['height'] = (int) round($displayedimageinfo['height'] * $multiplier);
+            }
+
             $tmproot = make_temp_directory('gridformatdisplayedimagecontainer');
             $tmpfilepath = $tmproot . '/' . $sectionfile->get_contenthash();
             $sectionfile->copy_content_to($tmpfilepath);
@@ -287,12 +313,9 @@ class toolbox {
             $crop = ($settings['imageresizemethod'] == 1) ? false : true;
 
             $newmime = $mime;
-            $isdisplayedwebponly = false;
-            if ($mime != 'image/webp') {
-                $isdisplayedwebponly = (get_config('format_grid', 'defaultdisplayedimagefiletype') == 2);
-                if ($isdisplayedwebponly) { // WebP.
-                    $newmime = 'image/webp';
-                }
+            $isdisplayedwebponly = ($converttowebp && $mime != 'image/webp');
+            if ($isdisplayedwebponly) { // WebP.
+                $newmime = 'image/webp';
             }
 
             $debugdata = [
