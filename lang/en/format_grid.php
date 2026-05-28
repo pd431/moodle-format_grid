@@ -109,6 +109,14 @@ $string['webp'] = 'WebP';
 $string['defaultdisplayedimagefiletype'] = 'Displayed image type';
 $string['defaultdisplayedimagefiletype_desc'] = "'Original' or 'WebP'.";
 
+// Image file size threshold.
+$string['defaultimagesizethreshold'] = 'Image file size threshold (KB)';
+$string['defaultimagesizethreshold_desc'] = 'If the uploaded image is at or below this size in kilobytes, it is served directly without GD processing, preserving original quality. Set to 0 to always process. Has no effect when the displayed image type is set to WebP.';
+
+// DPI multiplier.
+$string['defaultdpimultiplier'] = 'Image DPI multiplier';
+$string['defaultdpimultiplier_desc'] = 'Multiplies the tile dimensions when GD generates the processed image. Higher values produce sharper results on high-DPI (retina) screens at the cost of larger file sizes.';
+
 // Single page summary image.
 $string['off'] = 'Off';
 $string['centre'] = 'Centre';
