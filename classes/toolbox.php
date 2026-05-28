@@ -163,6 +163,7 @@ class toolbox {
                             $lock->release();
                             throw $e;
                         }
+                        break; // Only process the first non-directory file.
                     }
                 }
                 if (!defined('BEHAT_SITE_RUNNING')) {
@@ -779,6 +780,7 @@ class toolbox {
                                             $coursesectionimage->sectionid,
                                             $format
                                         );
+                                        break; // Only process the first non-directory file.
                                 }
                             }
                         } catch (Exception $e) {

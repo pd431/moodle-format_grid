@@ -156,6 +156,7 @@ class MoodleQuickForm_sectionfilemanager extends MoodleQuickForm_filemanager imp
                                     throw $e;
                                 }
                             }
+                            break; // Only process the first non-directory file.
                         }
                     }
                     if (!$havefiles) {
