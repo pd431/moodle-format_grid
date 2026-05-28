@@ -77,9 +77,13 @@
     min-height: 0;
 }
 
+.format-grid .thegrid .grid-section-inner {
+    border-radius: inherit;
+    overflow: hidden;
+}
+
 .format-grid .thegrid .grid-image-container {
     height: 140px;
-    overflow: hidden;
 }
 
 .format-grid .thegrid .grid-image {
