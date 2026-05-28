@@ -78,6 +78,7 @@
 }
 
 .format-grid .thegrid .grid-image-container {
+    border-radius: inherit;
     height: 140px;
     overflow: hidden;
 }
