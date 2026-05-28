@@ -192,6 +192,22 @@ class toolbox {
     }
 
     /**
+     * Deletes all non-directory files in the displayedsectionimage file area for a section.
+     *
+     * @param int $coursecontextid Course context id.
+     * @param int $sectionid Section id.
+     * @param file_storage $fs File storage instance.
+     */
+    private function delete_existing_displayed_image($coursecontextid, $sectionid, $fs) {
+        $existingfiles = $fs->get_area_files($coursecontextid, 'format_grid', 'displayedsectionimage', $sectionid);
+        foreach ($existingfiles as $existingfile) {
+            if (!$existingfile->is_directory()) {
+                $existingfile->delete();
+            }
+        }
+    }
+
+    /**
      * Store the original uploaded file directly as the displayed image, bypassing GD processing.
      * Used for SVG files (which GD cannot process) and images under the file size threshold.
      *
@@ -204,16 +220,12 @@ class toolbox {
      */
     private function store_original_as_displayed_image($sectionimage, $sectionfile, $courseid, $sectionid, $mime) {
         global $DB;
+
         $fs = get_file_storage();
         $filename = $sectionfile->get_filename();
         $coursecontext = context_course::instance($courseid);
 
-        $existingfiles = $fs->get_area_files($coursecontext->id, 'format_grid', 'displayedsectionimage', $sectionid);
-        foreach ($existingfiles as $existingfile) {
-            if (!$existingfile->is_directory()) {
-                $existingfile->delete();
-            }
-        }
+        $this->delete_existing_displayed_image($coursecontext->id, $sectionid, $fs);
 
         $created = time();
         $displayedimagefilerecord = [
@@ -301,12 +313,9 @@ class toolbox {
             $crop = ($settings['imageresizemethod'] == 1) ? false : true;
 
             $newmime = $mime;
-            $isdisplayedwebponly = false;
-            if ($mime != 'image/webp') {
-                $isdisplayedwebponly = (get_config('format_grid', 'defaultdisplayedimagefiletype') == 2);
-                if ($isdisplayedwebponly) { // WebP.
-                    $newmime = 'image/webp';
-                }
+            $isdisplayedwebponly = ($converttowebp && $mime != 'image/webp');
+            if ($isdisplayedwebponly) { // WebP.
+                $newmime = 'image/webp';
             }
 
             $debugdata = [
@@ -330,12 +339,7 @@ class toolbox {
                 $coursecontext = context_course::instance($courseid);
 
                 // Remove existing displayed image.
-                $existingfiles = $fs->get_area_files($coursecontext->id, 'format_grid', 'displayedsectionimage', $sectionid);
-                foreach ($existingfiles as $existingfile) {
-                    if (!$existingfile->is_directory()) {
-                        $existingfile->delete();
-                    }
-                }
+                $this->delete_existing_displayed_image($coursecontext->id, $sectionid, $fs);
 
                 $created = time();
                 $displayedimagefilerecord = [
