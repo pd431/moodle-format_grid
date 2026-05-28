@@ -79,6 +79,7 @@
 
 .format-grid .thegrid .grid-image-container {
     height: 140px;
+    overflow: hidden;
 }
 
 .format-grid .thegrid .grid-image {
@@ -92,11 +93,24 @@
 /*rtl:begin:ignore*/
 .format-grid .thegrid .grid-image.grid-scaled img {
     left: 50%;
+    max-height: 100%;
+    max-width: 100%;
     position: absolute;
     top: 50%;
     transform: translate(-50%,-50.25%);
 }
 /*rtl:end:ignore*/
+
+.format-grid .thegrid .grid-image:not(.grid-scaled) {
+    height: 100%;
+}
+
+.format-grid .thegrid .grid-image:not(.grid-scaled) img {
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    width: 100%;
+}
 
 .format-grid .thegrid .grid-image .grid-badge-middle {
     bottom: 0;
