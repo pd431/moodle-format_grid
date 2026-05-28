@@ -40,7 +40,7 @@ class MoodleQuickForm_sectionfilemanager extends MoodleQuickForm_filemanager imp
     private static $options = [
         'maxfiles' => 1,
         'subdirs' => 0,
-        'accepted_types' => ['gif', 'jpe', 'jpeg', 'jpg', 'png', 'webp'],
+        'accepted_types' => ['gif', 'jpe', 'jpeg', 'jpg', 'png', 'svg', 'webp'],
         'return_types' => FILE_INTERNAL,
     ];
 
@@ -156,6 +156,7 @@ class MoodleQuickForm_sectionfilemanager extends MoodleQuickForm_filemanager imp
                                     throw $e;
                                 }
                             }
+                            break; // Only process the first non-directory file.
                         }
                     }
                     if (!$havefiles) {

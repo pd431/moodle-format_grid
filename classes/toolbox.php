@@ -115,7 +115,7 @@ class toolbox {
         if ($displayediswebp) {
             $filetype = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
             if (!empty($filetype)) {
-                if ($filetype != 'webp') {
+                if ($filetype != 'webp' && $filetype != 'svg') {
                     $filename .= '.webp';
                 }
             } else {
@@ -163,6 +163,7 @@ class toolbox {
                             $lock->release();
                             throw $e;
                         }
+                        break; // Only process the first non-directory file.
                     }
                 }
                 if (!defined('BEHAT_SITE_RUNNING')) {
@@ -200,16 +201,51 @@ class toolbox {
             $mime = $sectionfile->get_mimetype();
             $filename = $sectionfile->get_filename();
 
-            // Core does not natively support webp.
+            // Core does not natively support webp or svg+xml.
             if ($mime == 'document/unknown') {
                 $filetype = strtolower(pathinfo($filename ?? '', PATHINFO_EXTENSION));
-                if ((!empty($filetype)) && ($filetype == 'webp')) {
-                    $mime = 'image/webp';
-                    $updatedrecord = new \stdClass();
-                    $updatedrecord->id = $sectionfile->get_id();
-                    $updatedrecord->mimetype = $mime;
-                    $DB->update_record('files', $updatedrecord);
+                if (!empty($filetype)) {
+                    if ($filetype == 'webp') {
+                        $mime = 'image/webp';
+                        $updatedrecord = new \stdClass();
+                        $updatedrecord->id = $sectionfile->get_id();
+                        $updatedrecord->mimetype = $mime;
+                        $DB->update_record('files', $updatedrecord);
+                    } else if ($filetype == 'svg') {
+                        $mime = 'image/svg+xml';
+                    }
                 }
+            }
+
+            // SVG is a vector format; GD cannot process it, so store it directly as the displayed image.
+            if ($mime == 'image/svg+xml') {
+                $coursecontext = context_course::instance($courseid);
+                $existingfiles = $fs->get_area_files($coursecontext->id, 'format_grid', 'displayedsectionimage', $sectionid);
+                foreach ($existingfiles as $existingfile) {
+                    if (!$existingfile->is_directory()) {
+                        $existingfile->delete();
+                    }
+                }
+                $created = time();
+                $displayedimagefilerecord = [
+                    'contextid' => $coursecontext->id,
+                    'component' => 'format_grid',
+                    'filearea' => 'displayedsectionimage',
+                    'itemid' => $sectionid,
+                    'filepath' => '/',
+                    'filename' => $filename,
+                    'userid' => $sectionfile->get_userid(),
+                    'author' => $sectionfile->get_author(),
+                    'license' => $sectionfile->get_license(),
+                    'timecreated' => $created,
+                    'timemodified' => $created,
+                    'mimetype' => $mime,
+                ];
+                $fs->create_file_from_storedfile($displayedimagefilerecord, $sectionfile);
+                $sectionimage->displayedimagestate++;
+                $DB->set_field('format_grid_image', 'displayedimagestate', $sectionimage->displayedimagestate,
+                    ['sectionid' => $sectionid]);
+                return $sectionimage;
             }
 
             $displayedimageinfo = $this->get_displayed_image_container_properties($settings);
@@ -772,13 +808,14 @@ class toolbox {
                                 $coursesectionimage->sectionid);
                             foreach ($files as $file) {
                                 if (!$file->is_directory()) {
-                                        $coursesectionimage = $toolbox->setup_displayed_image(
-                                            $coursesectionimage,
-                                            $file,
-                                            $courseid,
-                                            $coursesectionimage->sectionid,
-                                            $format
-                                        );
+                                    $coursesectionimage = $toolbox->setup_displayed_image(
+                                        $coursesectionimage,
+                                        $file,
+                                        $courseid,
+                                        $coursesectionimage->sectionid,
+                                        $format
+                                    );
+                                    break; // Only process the first non-directory file.
                                 }
                             }
                         } catch (Exception $e) {
